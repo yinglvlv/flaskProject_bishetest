@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}{{ year }} F1 车手积分{% endblock %}
+{% block page_content %}
+    <h1>{{ year }} F1 车手积分</h1>
+
+    <div class="btn-group mb-3">
+        <a href="{{ url_for('driver_standings_page', year=year) }}" class="btn btn-highlight active">车手</a>
+        <a href="{{ url_for('constructor_standings_page', year=year) }}" class="btn btn-highlight">车队</a>
+        <a href="{{ url_for('calendar', year=year) }}" class="btn btn-highlight">比赛日历</a>
+    </div>
+
+    <section>
+        <h2>车手积分榜</h2>
+        <div class="table-container">
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th>车手</th>
+                        {% for race, flag in race_flag_pairs.items() %}
+                            <th>
+                                <div class="race-header">
+                                    <a href="{{ url_for('race_detail', year=year, race_id=races[races['name'] == race]['raceId'].iloc[0]) }}">
+                                        <img src="{{ url_for('static', filename=flag) }}" alt="{{ race }}" class="race-flag">
+                                    </a>
+                                    <span class="race-name">{{ race }}</span>
+                                </div>
+                            </th>
+                        {% endfor %}
+                        <th>总积分</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in driver_table.itertuples() %}
+                        <tr class="{% if loop.index0 is divisibleby 2 %}odd-row{% else %}even-row{% endif %}">
+                            <td class="driver-name">{{ row.Driver }}</td>
+                            {% for score in row[2:-1] %}
+                                <td class="score-cell">{{ score if score > 0 else '-' }}</td>
+                            {% endfor %}
+                            <td class="total-points">{{ row[-1] }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section>
+        <h2>车手积分趋势</h2>
+        <div id="pointsChart" style="width: 1800px; height: 400px;"></div>
+    </section>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+    <script>
+        (function() {
+            const chartDom = document.getElementById('pointsChart');
+            if (!chartDom) {
+                console.error('图表容器未找到');
+                return;
+            }
+            const myChart = echarts.init(chartDom);
+
+            const driverPoints = {{ driver_points | tojson | safe }};
+            const raceNames = {{ race_names | tojson | safe }};
+            const racePoints = {{ race_points | tojson | safe }};
+            const yearRaces = {{ races.to_json(orient='records') | safe }};
+
+            console.log('数据:', driverPoints);
+            console.log('标签:', raceNames);
+            console.log('比赛积分:', racePoints);
+            console.log('年度比赛:', yearRaces);
+
+            if (!driverPoints || !raceNames || !yearRaces) {
+                console.error('数据、标签或年度比赛数据缺失');
+                return;
+            }
+
+            // 按 driverId 聚合数据
+            const driverDataMap = {};
+            driverPoints.forEach(driver => {
+                if (!driverDataMap[driver.driverId]) {
+                    driverDataMap[driver.driverId] = {
+                        name: `${driver.forename} ${driver.surname}`,
+                        teamColor: driver.team_color || '#888888',
+                        points: []
+                    };
+                }
+                const raceMatch = yearRaces.find(r => r.raceId === driver.raceId);
+                if (raceMatch) {
+                    const raceIndex = raceNames.indexOf(raceMatch.name);
+                    driverDataMap[driver.driverId].points[raceIndex] = driver.cumulative_points || 0;
+                }
+            });
+
+            // 补全数据，确保每个车手有与 raceNames 长度相同的数据点
+            Object.values(driverDataMap).forEach(driver => {
+                while (driver.points.length < raceNames.length) {
+                    driver.points.push(0); // 未参赛的比赛补 0
+                }
+            });
+
+            // 构造 series 数据
+            const series = Object.values(driverDataMap).map(driver => ({
+                name: driver.name,
+                type: 'line',
+                data: driver.points,
+                lineStyle: { color: driver.teamColor },
+                itemStyle: { color: driver.teamColor }
+            }));
+
+            // 构造标注（每场比赛的积分增量）
+            const markLines = raceNames.map((raceName, idx) => {
+                const pointsForRace = racePoints.filter(r => {
+                    const rName = yearRaces.find(race => race.raceId === r.raceId)?.name;
+                    return rName === raceName;
+                });
+                const content = pointsForRace.length > 0
+                    ? pointsForRace.map(r => `${r.forename[0]}. ${r.surname}: +${r.points}`).join('\n')
+                    : '无积分';
+                return {
+                    xAxis: idx,
+                    label: {
+                        show: true,
+                        position: 'top',
+                        formatter: content,
+                        backgroundColor: 'rgba(45, 45, 45, 0.8)',
+                        color: '#d3d3d3',
+                        fontSize: 12,
+                        padding: 4
+                    },
+                    lineStyle: { color: '#444', width: 1 }
+                };
+            });
+
+            // ECharts 配置项
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    formatter: function(params) {
+                        let result = `${params[0].name}\n`; // 大奖赛名称
+                        params.forEach(param => {
+                            result += `${param.seriesName}: ${param.value} 积分\n`;
+                        });
+                        return result;
+                    }
+                },
+                legend: {
+                    textStyle: { color: '#d3d3d3' },
+                    top: '5%'
+                },
+                xAxis: {
+                    type: 'category',
+                    data: raceNames, // 大奖赛名称保持英文
+                    name: '大奖赛',
+                    nameTextStyle: { color: '#d3d3d3' },
+                    axisLine: { lineStyle: { color: '#d3d3d3' } },
+                    axisTick: { lineStyle: { color: '#d3d3d3' } },
+                    axisLabel: { color: '#d3d3d3' }
+                },
+                yAxis: {
+                    type: 'value',
+                    name: '积分',
+                    nameTextStyle: { color: '#d3d3d3' },
+                    axisLine: { lineStyle: { color: '#d3d3d3' } },
+                    axisTick: { lineStyle: { color: '#d3d3d3' } },
+                    axisLabel: { color: '#d3d3d3' },
+                    splitLine: { lineStyle: { color: '#444' } }
+                },
+                dataZoom: [
+                    { type: 'inside', start: 0, end: 100 }, // 内置缩放
+                    { type: 'slider', start: 0, end: 100 }  // 滑动条缩放
+                ],
+                series: series,
+                markLine: {
+                    data: markLines,
+                    symbol: 'none' // 不显示箭头
+                }
+            };
+
+            myChart.setOption(option);
+        })();
+    </script>
+{% endblock %}

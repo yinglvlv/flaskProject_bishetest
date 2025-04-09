@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}{{ year }} F1 数据分析{% endblock %}
+{% block page_content %}
+    <h1>{{ year }} F1 数据分析</h1>
+
+    <div class="btn-group mb-3">
+        <a href="{{ url_for('driver_standings_page', year=year) }}" class="btn btn-highlight">车手</a>
+        <a href="{{ url_for('constructor_standings_page', year=year) }}" class="btn btn-highlight">车队</a>
+        <a href="{{ url_for('calendar', year=year) }}" class="btn btn-highlight">比赛日历</a>
+    </div>
+
+    <section>
+        <h2>车手积分榜</h2>
+        <div class="table-container">
+            <table class="custom-table">
+                <thead>
+                    <tr>
+                        <th>车手</th>
+                        {% for race, flag in race_flag_pairs.items() %}
+                            <th>
+                                <div class="race-header">
+                                    <a href="{{ url_for('race_detail', year=year, race_id=races[races['name'] == race]['raceId'].iloc[0]) }}">
+                                        <img src="{{ url_for('static', filename=flag) }}" alt="{{ race }}" class="race-flag">
+                                    </a>
+                                    <span class="race-name">{{ race }}</span> <!-- 大奖赛名称保持英文 -->
+                                </div>
+                            </th>
+                        {% endfor %}
+                        <th>总积分</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in driver_table.itertuples() %}
+                        <tr class="{% if loop.index0 is divisibleby 2 %}odd-row{% else %}even-row{% endif %}">
+                            <td class="driver-name">{{ row.Driver }}</td>
+                            {% for score in row[2:-1] %}
+                                <td class="score-cell">{{ score if score > 0 else '-' }}</td>
+                            {% endfor %}
+                            <td class="total-points">{{ row[-1] }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section>
+        <h2>车手积分趋势</h2>
+        <div class="btn-group mb-3">
+            <button id="showAll" class="btn btn-highlight active">显示所有车手</button>
+            <button id="showTop10" class="btn btn-highlight">显示前10名</button>
+        </div>
+        <div style="position: relative; height: 500px; width: 100%;">
+            <canvas id="pointsChart"></canvas>
+        </div>
+    </section>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.0.0/dist/chartjs-plugin-annotation.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <script>
+        (function() {
+            const ctx = document.getElementById('pointsChart').getContext('2d');
+            if (!ctx) return;
+
+            const data = {{ driver_points | tojson | safe }};
+            const labels = {{ race_names | tojson | safe }};
+            const racePoints = {{ race_points | tojson | safe }};
+            const yearRaces = {{ races.to_json(orient='records') | safe }};
+
+            // 创建车手数据映射
+            const driverDataMap = {};
+            data.forEach(driver => {
+                if (!driverDataMap[driver.driverId]) {
+                    driverDataMap[driver.driverId] = {
+                        name: `${driver.forename} ${driver.surname}`,
+                        teamColor: driver.team_color || '#888888',
+                        points: {},
+                        finalPoints: 0
+                    };
+                }
+                const race = yearRaces.find(r => r.raceId === driver.raceId);
+                if (race) {
+                    driverDataMap[driver.driverId].points[race.name] = driver.cumulative_points || 0;
+                    driverDataMap[driver.driverId].finalPoints = Math.max(
+                        driverDataMap[driver.driverId].finalPoints,
+                        driver.cumulative_points || 0
+                    );
+                }
+            });
+
+            // 数据集
+            const datasetsAll = Object.keys(driverDataMap).map(driverId => ({
+                label: driverDataMap[driverId].name,
+                data: labels.map(label => driverDataMap[driverId].points[label] || 0),
+                borderColor: driverDataMap[driverId].teamColor,
+                backgroundColor: driverDataMap[driverId].teamColor + '40',
+                fill: false,
+                tension: 0.3,
+                pointRadius: 3,
+                pointHoverRadius: 6,
+                pointBackgroundColor: driverDataMap[driverId].teamColor,
+                borderWidth: 2,
+                finalPoints: driverDataMap[driverId].finalPoints
+            }));
+
+            function getDatasets(limit = null) {
+                if (!limit) return datasetsAll;
+                return datasetsAll
+                    .sort((a, b) => b.finalPoints - a.finalPoints)
+                    .slice(0, limit);
+            }
+
+            // 比赛注解
+            const annotations = labels.map(label => {
+                const race = yearRaces.find(r => r.name === label);
+                if (!race) return null;
+                const pointsForRace = racePoints.filter(r => {
+                    const raceName = yearRaces.find(yr => yr.raceId === r.raceId)?.name;
+                    return raceName === label;
+                });
+                return {
+                    type: 'line',
+                    xMin: label,
+                    xMax: label,
+                    borderColor: '#444',
+                    borderWidth: 1,
+                    label: {
+                        enabled: true,
+                        content: pointsForRace.map(r => `${r.forename[0]}. ${r.surname}: +${r.points}`).join('\n') || '无积分',
+                        position: 'top',
+                        backgroundColor: 'rgba(45, 45, 45, 0.9)',
+                        color: '#d3d3d3',
+                        font: { size: 10, weight: 'bold' }
+                    }
+                };
+            }).filter(a => a !== null);
+
+            // 初始化图表
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: getDatasets()
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            title: { display: true, text: '大奖赛', color: '#d3d3d3', font: { size: 14 } },
+                            grid: { color: '#444', borderColor: '#555' },
+                            ticks: { color: '#d3d3d3', maxRotation: 45, minRotation: 45 }
+                        },
+                        y: {
+                            title: { display: true, text: '累计积分', color: '#d3d3d3', font: { size: 14 } },
+                            beginAtZero: true,
+                            max: Math.max(...datasetsAll.map(d => d.finalPoints)) + 10,
+                            grid: { color: '#444', borderColor: '#555' },
+                            ticks: { color: '#d3d3d3', stepSize: 50 }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#d3d3d3',
+                                font: { size: 12 },
+                                usePointStyle: true,
+                                padding: 15
+                            },
+                            position: 'top',
+                            onClick: (e, legendItem, legend) => {
+                                const index = legendItem.datasetIndex;
+                                const ci = legend.chart;
+                                const meta = ci.getDatasetMeta(index);
+                                meta.hidden = meta.hidden === null ? !ci.data.datasets[index].hidden : null;
+                                ci.update();
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                            titleColor: '#fff',
+                            bodyColor: '#d3d3d3',
+                            padding: 10,
+                            bodySpacing: 5,
+                            cornerRadius: 5,
+                            callbacks: {
+                                title: context => `${context[0].label}`,
+                                label: context => `${context.dataset.label}: ${context.parsed.y} 分`,
+                                labelColor: context => ({
+                                    borderColor: context.dataset.borderColor,
+                                    backgroundColor: context.dataset.borderColor,
+                                    borderWidth: 2,
+                                    borderRadius: 2
+                                })
+                            }
+                        },
+                        annotation: { annotations: annotations },
+                        zoom: {
+                            pan: { enabled: true, mode: 'x' },
+                            zoom: {
+                                wheel: { enabled: true },
+                                pinch: { enabled: true },
+                                mode: 'x'
+                            }
+                        }
+                    },
+                    elements: { line: { borderWidth: 2 } },
+                    backgroundColor: '#2d2d2d'
+                }
+            });
+
+            // 按钮切换显示
+            document.getElementById('showAll').addEventListener('click', () => {
+                chart.data.datasets = getDatasets();
+                chart.update();
+                document.getElementById('showAll').classList.add('active');
+                document.getElementById('showTop10').classList.remove('active');
+            });
+            document.getElementById('showTop10').addEventListener('click', () => {
+                chart.data.datasets = getDatasets(10);
+                chart.update();
+                document.getElementById('showTop10').classList.add('active');
+                document.getElementById('showAll').classList.remove('active');
+            });
+        })();
+    </script>
+{% endblock %}

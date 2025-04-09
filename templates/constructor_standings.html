@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}车队积分 - {{ year }}{% endblock %}
+{% block page_content %}
+    <div class="content-area">
+        <div class="btn-group mb-3">
+            <a href="{{ url_for('driver_standings_page', year=year) }}" class="btn btn-highlight">车手</a>
+            <a href="{{ url_for('constructor_standings_page', year=year) }}" class="btn btn-highlight active">车队</a>
+            <a href="{{ url_for('calendar', year=year) }}" class="btn btn-highlight">比赛日历</a>
+        </div>
+        <div class="race-slider">
+            <h1>车队积分 - {{ year }}</h1>
+
+            <section>
+                <div class="table-container">
+                    <table class="custom-table">
+                        <thead>
+                            <tr>
+                                <th>排名</th>
+                                <th>车队</th>
+                                <th>积分</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in constructors.itertuples() %}
+                                <tr class="{% if loop.index0 is divisibleby 2 %}odd-row{% else %}even-row{% endif %}">
+                                    <td>{{ loop.index }}</td>
+                                    <td>{{ row.Constructor }}</td>
+                                    <td>{{ row.points }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section>
+                <h2>积分趋势</h2>
+                <div id="pointsTrendChart" style="width: 1200px; height: 400px;"></div>
+            </section>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+    <script>
+        (function() {
+            const chartDom = document.getElementById('pointsTrendChart');
+            if (!chartDom) {
+                console.error('画布上下文未找到');
+                return;
+            }
+            const myChart = echarts.init(chartDom);
+
+            const constructorPoints = {{ constructor_points | tojson | safe }};
+            const raceNames = {{ race_names | tojson | safe }};
+
+            console.log('原始车队积分数据:', constructorPoints);
+            console.log('大奖赛名称:', raceNames);
+
+            if (!constructorPoints || !raceNames) {
+                console.error('车队积分数据或大奖赛名称缺失');
+                return;
+            }
+
+            // 按 constructorId 聚合数据
+            const constructorData = {};
+            constructorPoints.forEach(item => {
+                if (!item.raceName) {
+                    console.warn('发现缺少 raceName 的记录:', item);
+                    return; // 跳过无效记录
+                }
+                if (!constructorData[item.constructorId]) {
+                    constructorData[item.constructorId] = {
+                        name: item.name,
+                        teamColor: item.team_color || '#888888',
+                        points: new Array(raceNames.length).fill(0)
+                    };
+                }
+                const raceIndex = raceNames.indexOf(item.raceName);
+                if (raceIndex === -1) {
+                    console.warn(`未找到比赛: ${item.raceName} 在 raceNames 中`);
+                } else {
+                    constructorData[item.constructorId].points[raceIndex] = item.cumulative_points || 0;
+                }
+            });
+
+            // 检查聚合后的数据
+            console.log('聚合后的车队数据:', constructorData);
+
+            // 构造 series 数据
+            const series = Object.values(constructorData).map(item => ({
+                name: item.name,
+                type: 'line',
+                data: item.points,
+                lineStyle: { color: item.teamColor },
+                itemStyle: { color: item.teamColor },
+                smooth: true
+            }));
+
+            // ECharts 配置项
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    formatter: function(params) {
+                        let result = `${params[0].name}\n`;
+                        params.forEach(param => {
+                            result += `${param.seriesName}: ${param.value} 积分\n`;
+                        });
+                        return result;
+                    }
+                },
+                legend: {
+                    textStyle: { color: '#d3d3d3' },
+                    top: '5%'
+                },
+                xAxis: {
+                    type: 'category',
+                    data: raceNames,
+                    name: '大奖赛',
+                    nameTextStyle: { color: '#d3d3d3' },
+                    axisLine: { lineStyle: { color: '#d3d3d3' } },
+                    axisTick: { lineStyle: { color: '#d3d3d3' } },
+                    axisLabel: { color: '#d3d3d3' }
+                },
+                yAxis: {
+                    type: 'value',
+                    name: '积分',
+                    nameTextStyle: { color: '#d3d3d3' },
+                    axisLine: { lineStyle: { color: '#d3d3d3' } },
+                    axisTick: { lineStyle: { color: '#d3d3d3' } },
+                    axisLabel: { color: '#d3d3d3' },
+                    splitLine: { lineStyle: { color: '#444' } }
+                },
+                dataZoom: [
+                    { type: 'inside', start: 0, end: 100 },
+                    { type: 'slider', start: 0, end: 100 }
+                ],
+                series: series
+            };
+
+            myChart.setOption(option);
+        })();
+    </script>
+{% endblock %}

@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+{% block title %}{{ race['name'] }} - {{ year }} 比赛详情{% endblock %}
+{% block page_content %}
+    <div class="content-area">
+        <h1>{{ race['name'] }} - {{ year }}</h1> <!-- 大奖赛名称保持英文 -->
+
+        <!-- 新增赛道图片和最近 5 场比赛获胜者 -->
+        <section class="circuit-section mb-4">
+            <div class="d-flex flex-wrap align-items-start">
+                <div class="circuit-image me-4">
+                    <img src="{{ url_for('static', filename='Circuit_picture/' + circuit_ref + '.png') }}"
+                         alt="{{ race['name'] }} Circuit"
+                         class="img-fluid"
+                         style="max-width: 400px; border-radius: 5px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);">
+                </div>
+                <div class="circuit-winners">
+                    <h3>最近 5 场比赛获胜者</h3>
+                    {% if recent_winners %}
+                        <ul class="list-unstyled">
+                            {% for winner in recent_winners %}
+                                <li class="mb-2">
+                                    <span class="winner-year">{{ winner.year }}</span> -
+                                    <span class="driver-name">{{ winner.driver_name }}</span>
+                                    (<span class="team-name">{{ winner.team_name }}</span>)
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p>暂无最近 5 场比赛的获胜者数据。</p>
+                    {% endif %}
+                </div>
+            </div>
+        </section>
+
+        <div class="btn-group mb-3">
+            <a href="{{ url_for('race_detail', year=year, race_id=race_id) }}" class="btn btn-highlight active">比赛结果</a>
+            <a href="{{ url_for('history_lap_graph', year=year, race_id=race_id) }}" class="btn btn-highlight">历史圈速图</a>
+            <a href="{{ url_for('race_grid', year=year, race_id=race_id) }}" class="btn btn-highlight">发车网格</a>
+            <a href="{{ url_for('race_lap_time', year=year, race_id=race_id) }}" class="btn btn-highlight">圈速对比</a>
+        </div>
+
+        <section>
+            <h2>比赛结果</h2>
+            <div class="table-container">
+                <table class="custom-table">
+                    <thead>
+                        <tr>
+                            <th>名次</th>
+                            <th>号码</th>
+                            <th>车手</th>
+                            <th>车队</th>
+                            <th>圈数</th>
+                            <th>用时</th>
+                            <th>积分</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in race_results.itertuples() %}
+                            {% if row.position == '\\N' %}
+                                {% set position_display = '未完成' %}
+                            {% else %}
+                                {% set position_base = row.position %}
+                                {% set gap_calc = row.grid|int - row.position|int if row.grid != '\\N' and row.grid else 0 %}
+                                {% set gap = ' (' ~ ('+' ~ gap_calc if gap_calc > 0 else gap_calc) ~ ')' if gap_calc != 0 else '' %}
+                                {% set position_display = position_base ~ gap %}
+                            {% endif %}
+                            <tr class="{% if loop.index0 is divisibleby 2 %}odd-row{% else %}even-row{% endif %}">
+                                <td>{{ position_display }}</td>
+                                <td>{{ row.number if row.number != '\\N' and row.number else '-' }}</td>
+                                <td class="driver-name">{{ row.driver_name }}</td>
+                                <td>{{ constructors[constructors['constructorId'] == row.constructorId]['name'].iloc[0] if row.constructorId in constructors['constructorId'].values else '未知' }}</td>
+                                <td>{{ row.laps if row.laps != '\\N' else '-' }}</td>
+                                <td>{{ row.time if row.time != '\\N' else status[status['statusId'] == row.statusId]['status'].iloc[0] if row.statusId in status['statusId'].values else '未知' }}</td>
+                                <td class="total-points">{{ row.points if row.points > 0 else '' }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section>
+            <h2>位置趋势</h2>
+            <div class="btn-group mb-3">
+                <button id="showAll" class="btn btn-highlight active">显示所有车手</button>
+                <button id="showTop10" class="btn btn-highlight">显示前10名</button>
+            </div>
+            <div style="position: relative; height: 500px; width: 100%;">
+                <canvas id="positionTrendChart"></canvas>
+            </div>
+        </section>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.0.0/dist/chartjs-plugin-annotation.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <script>
+        (function() {
+            const ctx = document.getElementById('positionTrendChart').getContext('2d');
+            if (!ctx) return;
+
+            const lapData = {{ lap_data.to_dict(orient='records') | tojson | safe }};
+            const pitData = {{ pit_data.to_dict(orient='records') | tojson | safe }};
+            const raceResults = {{ race_results.to_dict(orient='records') | tojson | safe }};
+
+            const driverMap = {};
+            raceResults.forEach(r => {
+                driverMap[r.driverId] = r.code || `D${r.driverId}`;
+            });
+
+            const driverPositions = {};
+            lapData.forEach(row => {
+                if (!driverPositions[row.driverId]) driverPositions[row.driverId] = [];
+                const position = row.position === '\\N' || !row.position ? null : parseInt(row.position);
+                driverPositions[row.driverId].push({ lap: row.lap, position: position });
+            });
+
+            const allDriverIds = [...new Set(raceResults.map(r => r.driverId))];
+            const maxLap = Math.max(...lapData.map(d => d.lap), 0);
+            allDriverIds.forEach(driverId => {
+                if (!driverPositions[driverId]) {
+                    driverPositions[driverId] = Array(maxLap).fill(null).map((_, i) => ({ lap: i + 1, position: null }));
+                } else {
+                    const existingLaps = new Set(driverPositions[driverId].map(d => d.lap));
+                    for (let i = 1; i <= maxLap; i++) {
+                        if (!existingLaps.has(i)) {
+                            driverPositions[driverId].push({ lap: i, position: null });
+                        }
+                    }
+                    driverPositions[driverId].sort((a, b) => a.lap - b.lap);
+                }
+            });
+
+            const drivers = allDriverIds.map(driverId => {
+                const driverInfo = raceResults.find(r => r.driverId === driverId);
+                const maxLap = Math.max(...(driverPositions[driverId].map(d => d.lap) || [0]), 0);
+                return {
+                    id: driverId,
+                    name: driverMap[driverId],
+                    constructorId: driverInfo ? driverInfo.constructorId : null,
+                    data: driverPositions[driverId],
+                    maxLap: maxLap,
+                    finalPosition: driverInfo && driverInfo.position !== '\\N' ? parseInt(driverInfo.position) : 999
+                };
+            });
+
+            const teamColors = {
+                1: '#fb8713', 6: '#f21c24', 131: '#91f2d5', 9: '#667cf0', 3: '#062bef',
+                214: '#fb51e5', 210: '#c7c6c7', 117: '#1f420a', 215: '#a1ace8', 15: '#20f33d',
+                51: '#990614', 213: '#a1ace8'
+            };
+
+            function getDatasets(limit = null) {
+                let filteredDrivers = drivers;
+                if (limit) {
+                    filteredDrivers = drivers.sort((a, b) => a.finalPosition - b.finalPosition).slice(0, limit);
+                }
+                return filteredDrivers.map(driver => ({
+                    label: driver.name,
+                    data: driver.data.map(d => ({ x: d.lap, y: d.position })),
+                    borderColor: teamColors[driver.constructorId] || '#888888',
+                    backgroundColor: (teamColors[driver.constructorId] || '#888888') + '40',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: teamColors[driver.constructorId] || '#888888',
+                    borderWidth: 2
+                }));
+            }
+
+            const annotations = {};
+            pitData.forEach(pit => {
+                const key = `${pit.driverId}-${pit.lap}`;
+                if (!annotations[key]) {
+                    const driver = drivers.find(d => d.id === pit.driverId);
+                    if (driver && pit.lap <= driver.maxLap) {
+                        const pitLapRecord = driver.data.find(d => d.lap === pit.lap);
+                        let yValue = pitLapRecord ? pitLapRecord.position : driver.data.findLast(d => d.position)?.position || 20;
+                        annotations[key] = {
+                            type: 'point',
+                            xValue: pit.lap,
+                            yValue: yValue,
+                            backgroundColor: 'rgba(0, 255, 0, 0.8)',
+                            borderColor: '#00ff00',
+                            borderWidth: 1,
+                            radius: 5,
+                            label: {
+                                enabled: true,
+                                content: 'PIT',
+                                position: 'top',
+                                backgroundColor: 'rgba(0, 255, 0, 0.9)',
+                                color: '#000',
+                                font: { size: 10, weight: 'bold' }
+                            }
+                        };
+                    }
+                }
+            });
+
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: getDatasets() },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            title: { display: true, text: '圈数', color: '#d3d3d3', font: { size: 14 } },
+                            min: 1,
+                            max: maxLap || 1,
+                            grid: { color: '#444', borderColor: '#555' },
+                            ticks: {
+                                color: '#d3d3d3',
+                                stepSize: 5,
+                                callback: value => Number.isInteger(value) ? value : null
+                            }
+                        },
+                        y: {
+                            title: { display: true, text: '位置', color: '#d3d3d3', font: { size: 14 } },
+                            reverse: true,
+                            min: 1,
+                            max: Math.max(...lapData.map(row => row.position || 1).filter(p => p), 20),
+                            grid: { color: '#444', borderColor: '#555' },
+                            ticks: { color: '#d3d3d3', stepSize: 1 }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#d3d3d3',
+                                font: { size: 12 },
+                                usePointStyle: true,
+                                padding: 15
+                            },
+                            position: 'top',
+                            onClick: (e, legendItem, legend) => {
+                                const index = legendItem.datasetIndex;
+                                const ci = legend.chart;
+                                const meta = ci.getDatasetMeta(index);
+                                meta.hidden = meta.hidden === null ? !ci.data.datasets[index].hidden : null;
+                                ci.update();
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#fff',
+                            bodyColor: '#d3d3d3',
+                            callbacks: {
+                                label: context => `${context.dataset.label}: 位置 ${context.parsed.y || 'N/A'}`
+                            }
+                        },
+                        annotation: { annotations: Object.values(annotations) },
+                        zoom: {
+                            pan: { enabled: true, mode: 'x' },
+                            zoom: {
+                                wheel: { enabled: true },
+                                pinch: { enabled: true },
+                                mode: 'x'
+                            }
+                        }
+                    },
+                    elements: { line: { borderWidth: 2 } },
+                    backgroundColor: '#2d2d2d'
+                }
+            });
+
+            document.getElementById('showAll').addEventListener('click', () => {
+                chart.data.datasets = getDatasets();
+                chart.update();
+                document.getElementById('showAll').classList.add('active');
+                document.getElementById('showTop10').classList.remove('active');
+            });
+            document.getElementById('showTop10').addEventListener('click', () => {
+                chart.data.datasets = getDatasets(10);
+                chart.update();
+                document.getElementById('showTop10').classList.add('active');
+                document.getElementById('showAll').classList.remove('active');
+            });
+        })();
+    </script>
+{% endblock %}

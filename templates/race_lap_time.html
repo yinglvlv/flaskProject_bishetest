@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}{{ race['name'] }} - {{ year }} 圈速对比{% endblock %}
+{% block page_content %}
+<div class="container-fluid">
+    <h1>{{ race['name'] }} - {{ year }} 圈速对比</h1> <!-- 大奖赛名称保持英文 -->
+
+    <!-- 页面内导航按钮 -->
+    <div class="btn-group mb-3">
+        <a href="{{ url_for('race_detail', year=year, race_id=race_id) }}" class="btn btn-highlight">比赛结果</a>
+        <a href="{{ url_for('history_lap_graph', year=year, race_id=race_id) }}" class="btn btn-highlight">历史圈速图</a>
+        <a href="{{ url_for('race_grid', year=year, race_id=race_id) }}" class="btn btn-highlight">发车网格</a>
+        <a href="{{ url_for('race_lap_time', year=year, race_id=race_id) }}" class="btn btn-highlight active">圈速对比</a>
+    </div>
+
+    <div class="row">
+        <!-- 左侧：圈速对比表格 -->
+        <div class="col-md-8">
+            <h2>圈速对比</h2>
+            <div class="table-responsive">
+                <table class="table table-dark table-striped table-hover custom-table">
+                    <thead>
+                        <tr>
+                            <th scope="col" style="width: 10%; text-align: center;">圈数</th>
+                            <th scope="col" style="width: 25%;">{{ summary['driver_a'] }}</th>
+                            <th scope="col" style="width: 25%;">{{ summary['driver_b'] }}</th>
+                            <th scope="col" style="width: 20%;">当圈差距 +/-</th>
+                            <th scope="col" style="width: 20%;">总计差距</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in comparison_table %}
+                        <tr>
+                            <td style="text-align: center; font-weight: bold; color: #d3d3d3;">{{ row['lap'] }}</td>
+                            <td style="color: {{ 'green' if row['driver_a_faster'] else ('red' if row['driver_b_faster'] else '#d3d3d3') }};">
+                                {{ row['time_a'] }}
+                            </td>
+                            <td style="color: {{ 'green' if row['driver_b_faster'] else ('red' if row['driver_a_faster'] else '#d3d3d3') }};">
+                                {{ row['time_b'] }}
+                            </td>
+                            <td style="color: {{ 'green' if row['gap']|float < 0 else ('red' if row['gap']|float > 0 else '#d3d3d3') }};">
+                                {{ row['gap'] }}
+                            </td>
+                            <td style="color: {{ 'green' if row['cumulative_gap']|float < 0 else ('red' if row['cumulative_gap']|float > 0 else '#d3d3d3') }};">
+                                {{ row['cumulative_gap'] }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 右侧：车手选择网格、图表和总结 -->
+        <div class="col-md-4">
+            <h2>选择车手</h2>
+            <form method="POST" id="driver-selection-form">
+                <!-- ... 其他部分保持不变，仅修改车手选择网格部分 ... -->
+                    <div class="driver-grid mb-3">
+                        {% for driver in drivers_list %}
+                        <div class="driver-item {% if driver['driverId'] in selected_drivers %}selected{% endif %}"
+                             data-driver-id="{{ driver['driverId'] }}"
+                             data-team-color="{{ driver['team_color'] }}">
+                            <img src="{{ url_for('static', filename='Drivers_picture/' + driver['code'] + '_' + year|string + '.png') }}"
+                                 alt="{{ driver['forename'] }} {{ driver['surname'] }}"
+                                 class="select-driver-photo">
+                            <div class="driver-info">
+                                <span class="driver-name">{{ driver['forename'] }} {{ driver['surname'] }}</span>
+                                <span class="driver-code">{{ driver['code'] }}</span>
+                                <span class="driver-number" style="color: {{ driver['team_color'] }}">{{ driver['number'] }}</span>
+                                <span class="driver-team" style="color: {{ driver['team_color'] }}">{{ driver['team'] }}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                <input type="hidden" name="driver_a" id="driver_a" value="{{ selected_drivers[0] }}">
+                <input type="hidden" name="driver_b" id="driver_b" value="{{ selected_drivers[1] }}">
+                <button type="submit" class="btn btn-highlight w-100">确认选择</button>
+            </form>
+
+            <h2>累计差距</h2>
+            <canvas id="gapChart" height="200"></canvas>
+
+            <h2>统计总结</h2>
+            <table class="table table-dark">
+                <thead>
+                    <tr>
+                        <th>指标</th>
+                        <th>{{ summary['driver_a'] }}</th>
+                        <th>{{ summary['driver_b'] }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>总时间</td><td>{{ summary['total_time_a'] }}</td><td>{{ summary['total_time_b'] }}</td></tr>
+                    <tr><td>最快圈速</td><td>{{ summary['fastest_lap_a'] }}</td><td>{{ summary['fastest_lap_b'] }}</td></tr>
+                    <tr><td>最慢圈速</td><td>{{ summary['slowest_lap_a'] }}</td><td>{{ summary['slowest_lap_b'] }}</td></tr>
+                    <tr><td>进站次数</td><td>{{ summary['pit_stops_a'] }}</td><td>{{ summary['pit_stops_b'] }}</td></tr>
+                    <tr><td>总进站时间</td><td>{{ summary['total_pit_time_a'] }}</td><td>{{ summary['total_pit_time_b'] }}</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 添加外部字体 -->
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const ctx = document.getElementById('gapChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ chart_data['labels']|tojson }},
+            datasets: [
+                {
+                    label: '{{ summary['driver_a'] }} (参考)',
+                    data: {{ chart_data['driver_a']|tojson }},
+                    borderColor: '{{ summary['team_color_a'] }}',
+                    backgroundColor: '{{ summary['team_color_a'] }}40',
+                    fill: false,
+                    tension: 0.4
+                },
+                {
+                    label: '{{ summary['driver_b'] }}',
+                    data: {{ chart_data['driver_b']|tojson }},
+                    borderColor: '{{ summary['team_color_b'] }}',
+                    backgroundColor: '{{ summary['team_color_b'] }}40',
+                    fill: false,
+                    tension: 0.4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: { title: { display: true, text: '圈数', color: '#d3d3d3' }, ticks: { color: '#d3d3d3' } },
+                y: { title: { display: true, text: '差距 (秒)', color: '#d3d3d3' }, ticks: { color: '#d3d3d3' } }
+            },
+            plugins: {
+                legend: { labels: { color: '#d3d3d3' } },
+                tooltip: { enabled: true }
+            }
+        }
+    });
+
+    // 车手选择逻辑
+    const driverItems = document.querySelectorAll('.driver-item');
+    const driverAInput = document.getElementById('driver_a');
+    const driverBInput = document.getElementById('driver_b');
+    let selectedCount = document.querySelectorAll('.driver-item.selected').length;
+
+    driverItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const driverId = item.getAttribute('data-driver-id');
+            const teamColor = item.getAttribute('data-team-color');
+
+            if (item.classList.contains('selected')) {
+                item.classList.remove('selected');
+                item.style.borderColor = '#3a3a3a'; // 恢复默认边框颜色
+                if (driverAInput.value === driverId) {
+                    driverAInput.value = '';
+                    selectedCount--;
+                } else if (driverBInput.value === driverId) {
+                    driverBInput.value = '';
+                    selectedCount--;
+                }
+            } else if (selectedCount < 2) {
+                item.classList.add('selected');
+                item.style.borderColor = teamColor; // 设置车队颜色边框
+                if (!driverAInput.value) {
+                    driverAInput.value = driverId;
+                } else if (!driverBInput.value) {
+                    driverBInput.value = driverId;
+                }
+                selectedCount++;
+            }
+            console.log('Driver A:', driverAInput.value, 'Driver B:', driverBInput.value);
+        });
+    });
+
+    // 提交表单时验证
+    document.getElementById('driver-selection-form').addEventListener('submit', (e) => {
+        if (!driverAInput.value || !driverBInput.value) {
+            e.preventDefault();
+            alert('请先选择两位车手！');
+        } else {
+            console.log('Submitting: Driver A =', driverAInput.value, 'Driver B =', driverBInput.value);
+        }
+    });
+</script>
+{% endblock %}

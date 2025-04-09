@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ race['name'] }} - {{ year }} 发车网格{% endblock %}
+{% block page_content %}
+<div class="container-fluid">
+    <h1>{{ race['name'] }} - {{ year }} 发车网格</h1>
+
+    <div class="btn-group mb-3">
+        <a href="{{ url_for('race_detail', year=year, race_id=race_id) }}" class="btn btn-highlight">比赛结果</a>
+        <a href="{{ url_for('history_lap_graph', year=year, race_id=race_id) }}" class="btn btn-highlight">历史圈速图</a>
+        <a href="{{ url_for('race_grid', year=year, race_id=race_id) }}" class="btn btn-highlight active">发车网格</a>
+        <a href="{{ url_for('race_lap_time', year=year, race_id=race_id) }}" class="btn btn-highlight">圈速对比</a>
+    </div>
+
+    <section>
+        <h2>发车网格</h2>
+        <div class="grid-container">
+            {% for row in grid_data.itertuples() %}
+            <div class="grid-item {% if row.grid % 2 == 1 %}left{% else %}right{% endif %}"
+                 style="order: {{ row.grid }};">
+                <img src="{{ url_for('static', filename='Drivers_picture/' + row.code + '_' + year|string + '.png') }}"
+                     alt="{{ row.code }}"
+                     class="grid-driver-photo">
+                <div class="grid-position">{{ row.grid }}</div>
+                <div class="grid-info">
+                    <div class="driver-details">
+                        <span class="driver-code">{{ row.code }}</span>
+                        <span class="driver-number" style="color: {{ row.team_color }}">{{ row.number }}</span>
+                        <span class="driver-team" style="color: {{ row.team_color }}">{{ row.team }}</span>
+                        <span class="driver-time">{{ row.best_time }}</span>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+</div>
+
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+{% endblock %}

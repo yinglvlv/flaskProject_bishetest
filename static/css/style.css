@@ -1,0 +1,448 @@
+body {
+    background-color: #1a1a1a;
+    color: #d3d3d3;
+    font-family: 'Arial', sans-serif;
+}
+
+.header-container {
+    display: flex;
+    align-items: flex-start;
+    padding: 5px 10px;
+    background-color: #2d2d2d;
+    border-bottom: 1px solid #444;
+}
+
+.container-fluid {
+    padding: 0 15px;
+}
+
+.content-area {
+    margin-left: 0;
+}
+
+.table-container {
+    overflow-x: auto;
+    margin-bottom: 20px;
+}
+
+.custom-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background-color: #2d2d2d;
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    font-family: 'Roboto', sans-serif;
+}
+
+.custom-table th {
+    background-color: #1a1a1a;
+    color: #ffffff;
+    padding: 12px;
+    text-align: left;
+    border-bottom: 2px solid #ff6200;
+    font-weight: 500;
+}
+
+.custom-table th:first-child {
+    border-top-left-radius: 5px;
+}
+
+.custom-table th:last-child {
+    border-top-right-radius: 5px;
+}
+
+.custom-table td {
+    padding: 10px;
+    border-bottom: 1px solid #3a3a3a;
+    vertical-align: middle;
+    transition: background-color 0.3s ease;
+}
+
+.odd-row {
+    background-color: #2d2d2d;
+}
+
+.even-row {
+    background-color: #3a3a3a;
+}
+
+.custom-table tr:hover {
+    background-color: rgba(255, 98, 0, 0.2);
+}
+
+.driver-name {
+    font-weight: bold;
+    color: #ffffff;
+    font-size: 1.1rem;
+}
+
+.score-cell {
+    text-align: center;
+    color: #d3d3d3;
+}
+
+.score-cell:empty::after {
+    content: '-';
+    color: #888;
+}
+
+.total-points {
+    font-weight: bold;
+    text-align: center;
+    color: #ff6200;
+}
+
+.race-header {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.race-flag {
+    width: 30px;
+    height: 20px;
+    margin-bottom: 5px;
+}
+
+.race-name {
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100px;
+}
+
+.table, .table-striped, .table-bordered {
+    border: none;
+}
+
+h1, h2, h3 {
+    color: #ffffff;
+    border-bottom: 2px solid #ff6200;
+    padding-bottom: 5px;
+}
+
+img {
+    vertical-align: middle;
+    margin-left: 5px;
+}
+
+.fade-in {
+    animation: fadeIn 1s ease-in;
+}
+
+@keyframes fadeIn {
+    0% { opacity: 0; transform: translateY(20px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+.btn-highlight {
+    background-color: #ff6200;
+    color: #ffffff;
+    border: none;
+    transition: transform 0.2s ease, background-color 0.3s ease;
+    padding: 5px 10px;
+    text-align: center;
+    width: 80px;
+    margin-bottom: 2px;
+    font-size: 14px;
+}
+
+.btn-highlight:hover {
+    background-color: #e55a00;
+    transform: scale(1.05);
+}
+
+.btn-highlight.active {
+    background-color: #d04f00;
+}
+
+a {
+    color: #ff6200;
+    text-decoration: none;
+    transition: color 0.3s ease;
+    font-size: 14px;
+}
+
+a:hover {
+    color: #e55a00;
+}
+
+/* 年份滑轮 */
+.year-slider {
+    width: 100px;
+    padding: 5px;
+    display: inline-block;
+    vertical-align: top;
+    overflow-y: auto;
+    max-height: 120px;
+}
+
+.year-buttons {
+    display: flex;
+    flex-direction: column;
+}
+
+/* 比赛信息滑轮 */
+.race-slider {
+    width: calc(100% - 100px);
+    padding: 5px;
+    display: inline-block;
+    overflow-x: auto;
+    vertical-align: top;
+}
+
+.race-list {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+    align-items: center;
+}
+
+.race-item {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    padding: 5px 10px;
+    transition: background-color 0.3s ease;
+}
+
+.race-item.active {
+    background-color: #d04f00;
+}
+
+.race-item img {
+    width: 100px;
+    height: 60px;
+    margin-right: 5px;
+}
+
+.race-item span {
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+/* 图表样式 */
+#pointsChart, #positionTrendChart, #gapTrendChart {
+    max-width: 100%;
+    height: 400px;
+    background-color: #2d2d2d;
+    border: 1px solid #3a3a3a;
+    border-radius: 5px;
+    padding: 10px;
+    margin-top: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+/* 自定义滚动条样式 */
+.year-slider::-webkit-scrollbar,
+.race-slider::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.year-slider::-webkit-scrollbar-track,
+.race-slider::-webkit-scrollbar-track {
+    background: #2d2d2d;
+}
+
+.year-slider::-webkit-scrollbar-thumb,
+.race-slider::-webkit-scrollbar-thumb {
+    background-color: #ff6200;
+    border-radius: 3px;
+}
+
+.year-slider::-webkit-scrollbar-thumb:hover,
+.race-slider::-webkit-scrollbar-thumb:hover {
+    background-color: #e55a00;
+}
+
+.btn-group {
+    display: flex;
+    gap: 10px;
+}
+
+/* 发车网格样式 */
+.grid-container {
+    display: flex;
+    flex-direction: column; /* 垂直排列，每行一个车手 */
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.grid-item {
+    display: flex;
+    align-items: center;
+    width: 50%;
+    margin-bottom: 25px;
+    padding: 20px;
+    background-color: #2d2d2d;
+    border: 1px solid #3a3a3a;
+    border-radius: 5px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    transition: transform 0.2s ease;
+}
+
+.grid-item:hover {
+    transform: scale(1.02);
+}
+
+.grid-item.left {
+    align-self: flex-start; /* 奇数排名靠左 */
+}
+
+.grid-item.right {
+    align-self: flex-end; /* 偶数排名靠右 */
+}
+
+.grid-position {
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: #ff6200;
+    margin-right: 20px;
+}
+
+.grid-info {
+    flex-grow: 1;
+}
+
+/* 车手选择网格 */
+.driver-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.driver-item {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    background-color: #2d2d2d;
+    border: 2px solid #3a3a3a;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.driver-item:hover {
+    background-color: #3a3a3a;
+}
+
+.driver-item.selected {
+    background-color: #1f1f1f;
+    /* 边框颜色通过 JS 动态设置为 team_color */
+}
+
+/* 车手图片样式 */
+.grid-driver-photo {
+    width: 120px;
+    height: 120px;
+    object-fit: cover;
+    border-radius: 5px;
+    border: 1px solid #3a3a3a;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    margin-right: 20px;
+}
+
+.select-driver-photo {
+    width: 50px;
+    height: 50px;
+    object-fit: cover;
+    border-radius: 5px;
+    border: 1px solid #3a3a3a;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    margin-right: 10px;
+}
+
+/* 车手信息样式 */
+.driver-details {
+    display: flex;
+    flex-direction: column;
+    color: #d3d3d3;
+}
+
+.driver-info { /* 用于车手选择网格 */
+    display: flex;
+    flex-direction: column;
+    color: #d3d3d3;
+}
+
+.driver-code {
+    font-size: 0.9rem;
+    color: #888;
+}
+
+.grid-item .driver-code {
+    font-size: 1.4rem;
+    font-weight: bold;
+    color: #d3d3d3;
+}
+
+.driver-number {
+    font-size: 0.9rem;
+}
+
+.grid-item .driver-number {
+    font-size: 1.3rem;
+}
+
+.driver-team {
+    font-size: 0.9rem;
+}
+
+.grid-item .driver-team {
+    font-size: 1.2rem;
+}
+
+.driver-time {
+    font-size: 0.9rem;
+    color: #a1ace8;
+    font-weight: bold;
+}
+
+/* 赛道信息样式 */
+.circuit-section {
+    background-color: #2d2d2d;
+    padding: 15px;
+    border-radius: 5px;
+    border: 1px solid #3a3a3a;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.circuit-image {
+    flex: 0 0 auto;
+}
+
+.circuit-winners {
+    flex: 1;
+}
+
+.circuit-winners h3 {
+    color: #ffffff;
+    border-bottom: 2px solid #ff6200;
+    padding-bottom: 5px;
+    margin-bottom: 10px;
+    font-size: 1.25rem;
+}
+
+.circuit-winners ul {
+    padding-left: 0;
+}
+
+.circuit-winners li {
+    color: #d3d3d3;
+    font-size: 14px;
+}
+
+.winner-year {
+    font-weight: bold;
+    color: #ff6200;
+}
+
+.team-name {
+    color: #a1ace8;
+}

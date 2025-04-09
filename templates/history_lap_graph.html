@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}{{ race['name'] }} - {{ year }} 历史圈速图{% endblock %}
+{% block page_content %}
+    <div class="content-area">
+        <h1>{{ race['name'] }} - {{ year }} 历史圈速图</h1> <!-- 大奖赛名称保持英文 -->
+
+        <div class="btn-group mb-3">
+            <a href="{{ url_for('race_detail', year=year, race_id=race_id) }}" class="btn btn-highlight">比赛结果</a>
+            <a href="{{ url_for('history_lap_graph', year=year, race_id=race_id) }}" class="btn btn-highlight active">历史圈速图</a>
+            <a href="{{ url_for('race_grid', year=year, race_id=race_id) }}" class="btn btn-highlight">发车网格</a>
+            <a href="{{ url_for('race_lap_time', year=year, race_id=race_id) }}" class="btn btn-highlight">圈速对比</a>
+        </div>
+
+        <section>
+            <h2>与领先者差距趋势</h2>
+            <div class="btn-group mb-3">
+                <button id="showAll" class="btn btn-highlight active">显示所有车手</button>
+                <button id="showTop10" class="btn btn-highlight">显示前10名</button>
+            </div>
+            <div style="position: relative; height: 500px; width: 100%;">
+                <canvas id="gapTrendChart"></canvas>
+            </div>
+        </section>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@2.0.0/dist/chartjs-plugin-annotation.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <script>
+        (function() {
+            const ctx = document.getElementById('gapTrendChart').getContext('2d');
+            if (!ctx) return;
+
+            const driverLapGaps = {{ driver_lap_gaps | tojson | safe }};
+            const maxLap = {{ max_lap }};
+            const pitAnnotations = {{ pit_annotations | tojson | safe }};
+            const maxGap = {{ max_gap }};
+
+            // 数据集
+            const datasetsAll = driverLapGaps.map(driver => {
+                const finalPosition = driver.gaps.filter(g => g !== null).length > 0 ?
+                    driverLapGaps.indexOf(driver) + 1 : 999; // 简易排序，建议后端提供
+                return {
+                    label: driver.name,
+                    data: driver.gaps.map((gap, index) => ({ x: index + 1, y: gap })),
+                    borderColor: driver.team_color,
+                    backgroundColor: driver.team_color + '40',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: driver.team_color,
+                    borderWidth: 2,
+                    spanGaps: true,
+                    finalPosition: finalPosition
+                };
+            });
+
+            function getDatasets(limit = null) {
+                if (!limit) return datasetsAll;
+                return datasetsAll
+                    .sort((a, b) => a.finalPosition - b.finalPosition)
+                    .slice(0, limit);
+            }
+
+            // 进站注解
+            const annotations = {};
+            pitAnnotations.forEach(pit => {
+                const key = `${pit.driverId}-${pit.lap}`;
+                if (!annotations[key]) {
+                    const driverData = datasetsAll.find(d => d.label === pit.name);
+                    if (driverData) {
+                        const gapAtLap = driverData.data.find(d => d.x === pit.lap)?.y;
+                        annotations[key] = {
+                            type: 'point',
+                            xValue: pit.lap,
+                            yValue: gapAtLap !== null ? gapAtLap : 0,
+                            backgroundColor: 'rgba(0, 255, 0, 0.8)',
+                            borderColor: '#00ff00',
+                            borderWidth: 1,
+                            radius: 5,
+                            label: {
+                                enabled: true,
+                                content: 'PIT',
+                                position: 'top',
+                                backgroundColor: 'rgba(0, 255, 0, 0.9)',
+                                color: '#000',
+                                font: { size: 10, weight: 'bold' }
+                            }
+                        };
+                    }
+                }
+            });
+
+            // 初始化图表
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: getDatasets() },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            title: { display: true, text: '圈数', color: '#d3d3d3', font: { size: 14 } },
+                            min: 1,
+                            max: maxLap,
+                            grid: { color: '#444', borderColor: '#555' },
+                            ticks: {
+                                color: '#d3d3d3',
+                                stepSize: 5,
+                                callback: value => Number.isInteger(value) ? value : null
+                            }
+                        },
+                        y: {
+                            title: { display: true, text: '与领先者差距 (秒)', color: '#d3d3d3', font: { size: 14 } },
+                            min: 0,
+                            max: Math.max(maxGap + 10, 50),
+                            grid: { color: '#444', borderColor: '#555' },
+                            ticks: { color: '#d3d3d3', stepSize: 10 }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#d3d3d3',
+                                font: { size: 12 },
+                                usePointStyle: true,
+                                padding: 15
+                            },
+                            position: 'top',
+                            onClick: (e, legendItem, legend) => {
+                                const index = legendItem.datasetIndex;
+                                const ci = legend.chart;
+                                const meta = ci.getDatasetMeta(index);
+                                meta.hidden = meta.hidden === null ? !ci.data.datasets[index].hidden : null;
+                                ci.update();
+                            }
+                        },
+                        tooltip: {
+                            mode: 'index', // 按 X 轴索引显示所有数据
+                            intersect: false, // 不需要精确点中数据点
+                            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                            titleColor: '#fff',
+                            bodyColor: '#d3d3d3',
+                            padding: 10,
+                            bodySpacing: 5,
+                            cornerRadius: 5,
+                            callbacks: {
+                                title: context => `第 ${context[0].parsed.x} 圈`,
+                                label: context => {
+                                    const gap = context.parsed.y !== null ? context.parsed.y.toFixed(1) : 'N/A';
+                                    return `${context.dataset.label}: ${gap} 秒`;
+                                },
+                                labelColor: context => ({
+                                    borderColor: context.dataset.borderColor,
+                                    backgroundColor: context.dataset.borderColor,
+                                    borderWidth: 2,
+                                    borderRadius: 2
+                                })
+                            }
+                        },
+                        annotation: { annotations: Object.values(annotations) },
+                        zoom: {
+                            pan: { enabled: true, mode: 'x' },
+                            zoom: {
+                                wheel: { enabled: true },
+                                pinch: { enabled: true },
+                                mode: 'x'
+                            }
+                        }
+                    },
+                    elements: { line: { borderWidth: 2 } },
+                    backgroundColor: '#2d2d2d'
+                }
+            });
+
+            // 按钮切换显示
+            document.getElementById('showAll').addEventListener('click', () => {
+                chart.data.datasets = getDatasets();
+                chart.update();
+                document.getElementById('showAll').classList.add('active');
+                document.getElementById('showTop10').classList.remove('active');
+            });
+            document.getElementById('showTop10').addEventListener('click', () => {
+                chart.data.datasets = getDatasets(10);
+                chart.update();
+                document.getElementById('showTop10').classList.add('active');
+                document.getElementById('showAll').classList.remove('active');
+            });
+        })();
+    </script>
+{% endblock %}

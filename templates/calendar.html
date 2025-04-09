@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ year }} 比赛日历{% endblock %}
+{% block page_content %}
+    <h1 class="text-center mb-4">{{ year }} 比赛日历</h1>
+
+    <!-- 导航按钮组 -->
+    <div class="btn-group mb-3">
+        <a href="{{ url_for('driver_standings_page', year=year) }}" class="btn btn-highlight">车手</a>
+        <a href="{{ url_for('constructor_standings_page', year=year) }}" class="btn btn-highlight">车队</a>
+        <a href="{{ url_for('calendar', year=year) }}" class="btn btn-highlight active">比赛日历</a>
+    </div>
+
+    <!-- 比赛日历网格 -->
+    <section class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+        {% for race in detailed_races %}
+        <div class="col">
+            <div class="card h-100 shadow-sm race-card" data-race-id="{{ race.raceId }}" data-year="{{ race.year }}">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-2">
+                        <img src="{{ url_for('static', filename='F1_Flags_2021-2025/' + race.country + '.png') }}"
+                             alt="{{ race.country }}" class="me-2" style="width: 40px; height: 30px;">
+                        <h5 class="card-title mb-0">{{ race.race_name }}</h5>
+                    </div>
+                    <p class="card-text">
+                        <strong>日期:</strong> {{ race.date }}<br>
+                        <strong>时间:</strong> {{ race.time }}<br>
+                        <strong>国家:</strong> {{ race.country }}<br>
+                        <span class="extra-info d-none">
+                            <strong>赛道:</strong> {{ race.circuit_name }}<br>
+                            <strong>地点:</strong> {{ race.location }}<br>
+                            <strong>经纬度:</strong> {{ race.lat }}, {{ race.lng }}
+                        </span>
+                    </p>
+                </div>
+                <a href="{{ url_for('race_detail', year=race.year, race_id=race.raceId) }}" class="stretched-link"></a>
+            </div>
+        </div>
+        {% endfor %}
+    </section>
+
+    <!-- 自定义 CSS -->
+    <style>
+        /* 卡片样式 */
+        .race-card {
+            background-color: #c7c6c7; /* 灰银色 */
+            color: #1a1a1a; /* 深色文字，与背景对比 */
+            transition: transform 0.2s ease, box-shadow 0.3s ease; /* 与 style.css 一致 */
+        }
+        .race-card:hover {
+            transform: scale(1.05); /* 与 .btn-highlight 的悬停效果一致 */
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); /* 增强阴影 */
+        }
+        .race-card:hover .extra-info {
+            display: block !important;
+        }
+        .card-title {
+            color: #1a1a1a; /* 标题颜色与卡片背景对比 */
+        }
+        .card-text {
+            color: #333; /* 稍浅的文字颜色，保持可读性 */
+        }
+        .card-text strong {
+            color: #ff6200; /* 橙色高亮，与主题一致 */
+        }
+    </style>
+
+    <!-- 自定义 JS -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.race-card').forEach(card => {
+                card.addEventListener('click', function() {
+                    const year = this.dataset.year;
+                    const raceId = this.dataset.raceId;
+                    window.location.href = `/year/${year}/race/${raceId}`;
+                });
+            });
+        });
+    </script>
+{% endblock %}
